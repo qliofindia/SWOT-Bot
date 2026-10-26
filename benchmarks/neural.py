@@ -470,8 +470,10 @@ class HFFineTuneClassifier(ClassifierMixin, BaseEstimator):
         self.classes_ = np.unique(y)
         yt = torch.from_numpy(np.searchsorted(self.classes_, y))
         self.tok_ = AutoTokenizer.from_pretrained(self.model_name)
+        # Some checkpoints (e.g. FinBERT) ship a classification head with a different
+        # number of classes; it is replaced by a freshly initialised 4-class head.
         self.model_ = AutoModelForSequenceClassification.from_pretrained(
-            self.model_name, num_labels=len(self.classes_)
+            self.model_name, num_labels=len(self.classes_), ignore_mismatched_sizes=True
         ).to(DEVICE)
         enc = self.tok_(X, truncation=True, max_length=self.max_len)["input_ids"]
 
