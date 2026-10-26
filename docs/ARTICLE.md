@@ -189,8 +189,7 @@ error inside one model is caught and logged, and the run moves on to the next
 model. A hard crash, such as running out of memory or a GPU fault, kills the
 process, just as it would kill a notebook kernel. Even then, every finished
 model is already saved, and launching again skips completed models and resumes
-at the first unfinished one. The notebook version of the benchmark follows the
-same rule, one cell per model, so a failed model can be fixed and rerun alone.
+at the first unfinished one.
 
 **Step 7: monitor and collect.** Claude polled the job with
 `HfApi().inspect_job()` and `fetch_job_logs()` and reported each model's score
