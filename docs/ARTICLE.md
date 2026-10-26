@@ -1,260 +1,317 @@
-# SWOT-Bot: classifying corporate text into Strengths, Weaknesses, Opportunities and Threats
+# SWOT-Bot: turning corporate documents into a SWOT analysis with NLP
 
-## The problem
+## What a corporate SWOT analysis is
 
-Companies produce a steady stream of narrative text: annual reports, business
-and financial highlights, executive summaries, credit and audit reports, risk
-reports, industry overviews, policies, announcements and blog posts. An analyst
-preparing a SWOT analysis reads this material and sorts each relevant passage
-into one of four groups.
+A SWOT analysis summarises a company's position under four headings. Two are
+internal, things the company controls. Two are external, conditions in its
+market and environment.
 
-A **strength** is an internal advantage, for example "low gearing gives
-financial flexibility." A **weakness** is an internal limitation, such as a
-collection period of 113 to 128 days against a credit policy of 30 to 60 days.
-An **opportunity** is an external factor the firm can use, like expansion into
-new markets through subsidiaries. A **threat** is an external risk, for
-instance a slowdown in the industry that buys most of the firm's output.
+- **Strengths** are internal advantages: a strong parent group, low debt, a
+  loyal customer base, efficient working-capital management.
+- **Weaknesses** are internal limitations: dependence on a few customers, a long
+  collection period, thin margins, high staff attrition.
+- **Opportunities** are external conditions the company can use: a growing
+  market, new geographies, a favourable policy change.
+- **Threats** are external conditions that can hurt it: an industry slowdown,
+  currency volatility, new competitors, regulation.
 
-SWOT-Bot automates the sorting. It takes passages of text, assigns each one to
-a quadrant with a confidence score, and returns the results so they can be
-consolidated into a Word document titled "SWOT Analysis." In machine-learning
-terms this is single-label text classification with four classes: each passage
-belongs to exactly one quadrant.
+The internal/external split matters because it decides what can be done. A
+weakness can be fixed by management. A threat can only be monitored, hedged or
+avoided.
 
-## How the pipeline works
+SWOT analyses are used wherever someone must form a view of a company quickly
+and defend it: credit appraisal and rating, investment research, due diligence
+before an acquisition, supplier and counterparty risk reviews, and strategy
+reviews inside the company.
 
-There are three stages. First, narrative passages (paragraphs or bullet points)
-are extracted from the source documents. Second, each passage is sent to the
-classifier, which returns a label and the probability of each of the four
-classes. Third, the passages are grouped by label and written into the four
-sections of the report.
+## Why it is slow to do by hand
 
-The Word add-in in `word-addin/` handles the second and third stages from
-inside Word. It sends the selected text to a local HTTP service and displays
-the classification.
+The evidence for a SWOT is spread across many documents: annual reports,
+business and financial highlights, executive summaries, audit and risk reports,
+industry overviews, legal documents, policies and procedures, press releases,
+media coverage and company announcements. For one company this can run to
+hundreds of pages.
 
-## The data
+An analyst reads all of it, picks out the passages that say something material,
+decides which quadrant each belongs to, and writes them up. The reading and
+sorting take most of the time. The judgement that matters, what the SWOT means
+for a lending decision or an investment thesis, comes at the end, often under
+time pressure.
 
-The training set, `data/train.csv`, contains 2,500 labelled passages taken from
-Indian corporate credit and business-analysis reports. Each row holds the text
-and a one-hot label across the four columns STRENGTHS, WEAKNESSES,
-OPPORTUNITIES and THREATS. The classes are moderately imbalanced: 827
-strengths, 619 weaknesses, 549 opportunities and 505 threats.
+Doing this by hand has three further costs. Two analysts sort the same passage
+differently, so results vary between people. Material in long documents gets
+missed. And the finished report rarely records which source sentence each point
+came from, which makes review and audit harder.
 
-Passages vary from a single line to a few hundred words. Measured in BERT
-tokens, the median passage is 93 tokens long, the 90th percentile is 204, and
-the longest is 467.
+## What SWOT-Bot does
 
-Two problems in the data affect how results should be read. The small file
-`data/test.csv` (16 rows) is mislabelled: a passage describing a "competitive
-edge over peers" is marked as a weakness, and the file contains no strengths at
-all. It is therefore not used for evaluation. Separately, apostrophes were lost
-in an earlier encoding step, so "debtor's" appears as "debtor?s." This does not
-affect the models much, but it should be fixed at the source.
+SWOT-Bot automates the sorting step. It takes passages of narrative text,
+assigns each one to Strengths, Weaknesses, Opportunities or Threats, attaches a
+confidence score, and returns the results so they can be consolidated into a
+Word document titled "SWOT Analysis."
 
-## Why the first version was replaced
+Here are three passages from the training data and how they are classified:
 
-The first version fine-tuned BERT through ktrain, a Keras wrapper whose last
-release was in June 2024. Three issues made it unreliable.
+> "The Company undertook significant capital expenditure... funded through
+> internal accruals. Low gearing gives financial flexibility to the Company to
+> raise additional funds for future capex plans." (Strength: internal, positive)
 
-The notebook set the maximum sequence length to 32 tokens. Because the median
-passage is 93 tokens, 74 percent of passages were truncated, and the model never
-saw most of the text it was meant to classify.
+> "Collection period of the Group remained high and ranged between 113 and 128
+> days... significantly high when compared with the management's credit policy
+> of 30–60 days." (Weakness: internal, negative)
 
-The headline figure of 95 percent accuracy was measured on the training data.
-Training accuracy shows how well a model fits examples it has already seen. It
-says little about how it performs on new passages.
+> "The group has forayed into multiple new countries including Netherland,
+> Singapore and Dubai through wholly owned subsidiaries." (Opportunity:
+> external, positive)
 
-The trained weights were never committed to the repository, so the result
-cannot be reproduced or checked.
+The analyst's job changes from reading and sorting everything to reviewing a
+pre-sorted draft. They correct the misclassified passages, which are flagged by
+low confidence, and spend their time on interpretation.
 
-Version 2 does not assume that BERT, or any other model, is the right choice. It
-runs a controlled comparison and lets the measurements decide.
+## Where it adds value
 
-## How the models were compared
+These are the expected benefits. The project has not yet run a time-and-motion
+study, so treat them as hypotheses to measure in a pilot, not as results.
 
-Twenty-eight models from nine families were evaluated on the same data under
-the same protocol.
+- **Throughput.** Classifying a passage takes milliseconds, so reading hundreds
+  of pages becomes reviewing a sorted list. The gain is largest when the same
+  kind of analysis is repeated across many companies, as in a credit or
+  research team.
+- **Consistency.** The same passage always gets the same label, which reduces
+  differences between analysts and between reviews of the same company over
+  time.
+- **Coverage.** Every passage fed in is classified, so material in long
+  documents is less likely to be missed.
+- **Traceability.** Each point in the report stays linked to its source
+  passage, so a reviewer or auditor can check where a claim came from.
+- **Triage.** Confidence scores show which passages need a person's attention,
+  so review effort goes where the model is unsure.
 
-The classical baselines are linear models on TF-IDF features: logistic
-regression, linear support vector machines, stochastic gradient descent, ridge
-regression, and logistic regression on a 300-dimensional latent semantic
-analysis (LSA) projection. They are joined by two probabilistic models
-(complement naive Bayes and NB-SVM), a gradient-boosted tree model (LightGBM on
-LSA features), and a soft-voting ensemble of the strongest linear models.
+What it does not do is just as important. It does not judge how much a strength
+or threat matters, it does not check whether a claim in a document is true, and
+it does not replace the analyst's conclusion. It is a first-draft generator with
+a human in the loop.
 
-The word-embedding models represent each passage by averaging pretrained word
-vectors from spaCy or from GloVe (loaded through Gensim), or by learning
-paragraph vectors with Gensim's Doc2Vec. fastText was trained both from scratch
-and with GloVe initialisation.
+## How the system fits together
 
-The neural networks trained on this data are a feed-forward network (MLP) over
-TF-IDF features; a convolutional network in the style of Kim (2014), with
-filter widths of three, four and five words; a bidirectional LSTM with
-attention pooling; and a two-layer Transformer encoder trained from scratch.
-The CNN, LSTM and Transformer start from GloVe word vectors.
+There are five stages:
 
-The pretrained transformers were tested in two ways. In the frozen setting, a
-sentence encoder (MiniLM, MPNet or BGE) turns each passage into a fixed vector
-and logistic regression classifies it. In the fine-tuned setting, DistilBERT,
-BERT-base, FinBERT (a BERT model pretrained on financial text) and RoBERTa-base
-are trained end to end on the classification task, with a maximum length of 256
-tokens. That length covers 97 percent of passages in full.
+1. **Collect.** Gather the documents for one company and extract their
+   narrative text.
+2. **Segment.** Split the text into passages: paragraphs or bullet points, each
+   making one point.
+3. **Classify.** Send the passages to the model, which returns a label and the
+   probability of each class.
+4. **Review.** An analyst checks low-confidence passages and corrects labels.
+5. **Consolidate.** Group the passages by label and write them into the four
+   sections of the Word report.
 
-Every model used five-fold stratified cross-validation with a fixed random seed,
-so all of them were trained and tested on the same splits. Neural models held
-back 10 percent of each training fold for early stopping and never saw the
-test fold during training. The main metric is macro-F1, the average F1 score
-across the four classes, which weights the smaller classes equally with the
-largest. Log loss is reported as a measure of how well calibrated the predicted
-probabilities are.
+The model runs as a small HTTP service. A Word add-in (in `word-addin/`) calls
+it from inside Word, so an analyst can classify selected text without leaving
+the document.
 
-With only 2,500 examples, a difference of half a point between two models can
-be noise. Each model was therefore compared with the top-ranked model using the
-Nadeau–Bengio corrected resampled t-test. This variant accounts for the overlap
-between training sets in cross-validation; a plain paired t-test understates
-the variance. A model counts as genuinely worse than the leader only when p is
-below 0.05.
+## Building it, step by step
 
-The full benchmark ran as a Hugging Face Job on a single NVIDIA A10G GPU. The
-complete per-model results, including fit time, prediction latency and model
-size, are in `benchmarks/RESULTS.md`, and they can be reproduced with:
+### Step 1: prepare labelled training data
 
-```bash
-python benchmarks/launch_hf_job.py            # upload code and start the GPU job
-python benchmarks/launch_hf_job.py --fetch    # download the results
-python benchmarks/benchmark.py report         # rebuild the report
+A supervised model learns from examples labelled by people. The training file,
+`data/train.csv`, holds 2,500 passages from Indian corporate credit and
+business-analysis reports. Each row has the passage text and four 0/1 columns,
+one per quadrant, with exactly one set to 1:
+
+```
+#id,Text,Label,STRENGTHS,WEAKNESSES,OPPORTUNITIES,THREATS
+1,Long-standing presence in industry coupled with part of TVS group,1,1,0,0,0
 ```
 
-## Benchmark results
+The classes are moderately balanced: 827 strengths, 619 weaknesses, 549
+opportunities and 505 threats. Passages are a median of 93 tokens long, and
+the longest is 467. Those lengths matter in step 3.
+
+The labels must be clean. A smaller file, `data/test.csv`, turned out to be
+mislabelled; for example, a passage about a "competitive edge over peers" is
+marked as a weakness. It is excluded from evaluation. One wrong label in a
+16-row test set moves accuracy by six points.
+
+### Step 2: choose the tooling
+
+The first version of this project used ktrain, a convenience wrapper around
+TensorFlow Keras, to fine-tune BERT in a few lines. ktrain's last release was
+in June 2024, and its BERT path downloads weights from a Google storage bucket
+that now refuses anonymous downloads. The rebuilt project uses Hugging Face
+`transformers` and PyTorch for BERT, and scikit-learn for the classical models.
+All are actively maintained.
+
+The steps ktrain bundled together still exist, done explicitly: tokenising
+passages with BERT's tokenizer (which adds the `[CLS]` and `[SEP]` markers),
+adding a four-way classification layer, and training with a learning-rate
+schedule that warms up and then decays.
+
+### Step 3: fine-tune BERT
+
+```python
+from swotbot.model import load_dataset
+from benchmarks.neural import HFFineTuneClassifier
+
+texts, labels = load_dataset("data/train.csv")
+bert = HFFineTuneClassifier("bert-base-uncased", max_len=256, epochs=3, lr=3e-5, batch_size=16)
+bert.fit(texts, labels)
+bert.predict_proba(["Manpower attrition risk along with increasing salary cost."])
+```
+
+The most important parameter is `max_len`, the number of tokens the model reads
+from each passage. The first version used 32. Since the median passage is 93
+tokens, 74 percent of passages were cut off and the model never saw most of
+their text. At 256 tokens only 3 percent are truncated.
+
+On a laptop-class CPU, one epoch takes about 24 minutes. On a single GPU it
+takes about a minute, which is why the heavy training runs on Hugging Face (see
+"Running the training on Hugging Face" below).
+
+### Step 4: measure it honestly
+
+The first version reported 95 percent accuracy "upon training." That number was
+measured on the passages the model had just been trained on, so it shows how
+well the model memorised them. It is not evidence of how the model handles a new
+annual report.
+
+The rebuilt project uses five-fold cross-validation. The data is split into
+five parts; the model is trained on four and tested on the fifth, and this
+repeats until each part has been the test set once. Every passage is scored by
+a model that never saw it.
+
+The headline metric is macro-F1, the average of the F1 score for each class.
+Plain accuracy can look good while the model neglects a smaller class. Macro-F1
+counts weaknesses and threats as much as strengths.
+
+### Step 5: compare BERT against the alternatives
+
+BERT is not automatically the best choice. It is large, slow on ordinary
+hardware, and with only 2,500 examples it may not beat simpler methods. So BERT
+was benchmarked against 27 other models on the same five folds. The other
+models fall into these groups:
+
+- classical classifiers on word and phrase frequencies (logistic regression,
+  support vector machines, naive Bayes, gradient-boosted trees);
+- word-embedding methods (spaCy vectors, GloVe and Doc2Vec via Gensim);
+- fastText;
+- neural networks trained on this data (a feed-forward network, a
+  convolutional network, a bidirectional LSTM and a small Transformer);
+- pretrained sentence encoders;
+- BERT, DistilBERT, FinBERT (BERT further trained on financial text) and
+  RoBERTa.
+
+Each model was compared with the leader using a statistical test that accounts
+for the overlap between cross-validation training sets. A model is only called
+better when the gap is larger than fold-to-fold noise.
 
 <!-- RESULTS -->
 
-## Using Hugging Face with Claude
-
-The benchmark was built and run with Claude Code working in a cloud session, a
-sandboxed Linux container with 4 CPU cores and no GPU. Getting BERT-class models
-into that workflow took several steps. Some were dead ends, and they are worth
-knowing about before you start.
-
-**Step 1: allow the Hugging Face domains.** The container's network policy
-blocked `huggingface.co` at first, so no pretrained model could be downloaded.
-Package indexes (PyPI) and GitHub were reachable, so classical models, spaCy
-vectors and GloVe (served from GitHub releases) worked, but BERT did not. The
-fix is in the cloud environment settings, not in code: under Network access,
-add `huggingface.co` and `*.hf.co` to the allowed domains and keep package
-managers allowed. The second pattern matters because downloads, buckets and
-the S3-compatible endpoint live on subdomains such as `s3.hf.co`. A change to
-the network policy may only apply to sessions started after it, so plan on
-opening a new session.
-
-**Step 2: provide a token without committing it.** Claude stored the Hugging
-Face access token in a `.env` file at the repository root. That file is listed
-in `.gitignore`, along with patterns such as `*.key`, `*API_Key*` and
-`secrets/`. Before each commit Claude scanned the staged changes for anything
-shaped like a key. The token was checked with `HfApi().whoami()`, which
-confirmed the account name and token type without printing the token. Two
-things did not work and wasted time. The `AWS_ACCESS_KEY_ID` variables already
-in the environment were placeholders, so the boto3 route to the bucket failed
-with "InvalidAccessKeyId." The `hf-mount` route needs both network access and
-FUSE support in the container. The `huggingface_hub` library (version 2.3) has
-native bucket functions, so neither boto3 nor a mount is needed.
-
-**Step 3: understand what a bucket is.** A Hugging Face bucket is storage. It
-holds files but cannot run code. To run models on Hugging Face hardware you
-need Hugging Face Jobs, which runs a container on a chosen machine. A job can
-mount a bucket as a folder.
-
-**Step 4: decide where the compute runs.** Claude timed one BERT-base training
-step in the container before choosing. At 256 tokens, an epoch over 2,000
-passages took about 24 minutes on 4 CPU cores, so five folds of three epochs
-would have taken about six hours. On a Hugging Face `a10g-small` machine (one
-A10G GPU, $1.00 per hour at the time of writing) the same work takes minutes.
-The job was given a hard two-hour timeout, which caps the cost at $2 whatever
-happens. Prices come from `HfApi().list_jobs_hardware()` and change, so check
-them before running.
-
-**Step 5: package the run.** The job runs a single `uv` script,
-`benchmarks/hf_job.py`. Its pinned dependencies are declared in the script
-header, so the job installs exactly what was tested. A launcher,
-`benchmarks/launch_hf_job.py`, copies an explicit allow-list of files (the
-code and `data/train.csv`, never `.env`) into the bucket under `code/`. It
-then starts the job with the token passed as a job secret and the bucket
-mounted. One detail matters: the mount path `/data` is reserved for job
-artifacts when running local scripts, so the bucket is mounted at `/bucket`.
-
-**Step 6: make failures cheap.** Each model's per-fold scores are written to
-`/bucket/results/folds/` as soon as that model finishes. An ordinary Python
-error inside one model is caught and logged, and the run moves on to the next
-model. A hard crash, such as running out of memory or a GPU fault, kills the
-process, just as it would kill a notebook kernel. Even then, every finished
-model is already saved, and launching again skips completed models and resumes
-at the first unfinished one.
-
-**Step 7: monitor and collect.** Claude polled the job with
-`HfApi().inspect_job()` and `fetch_job_logs()` and reported each model's score
-as it finished. When the job ended, the results were pulled back into the
-repository with `python benchmarks/launch_hf_job.py --fetch`, and the report
-was rebuilt with `python benchmarks/benchmark.py report`.
-
-## Training the production model
+### Step 6: train and save the production model
 
 ```bash
 pip install -e ".[dev]"
 python -m swotbot train
 ```
 
-The `train` command runs five-fold cross-validation, prints accuracy and
-macro-F1, fits the model on all 2,500 passages, and saves it to `models/`
-along with metadata: the library version, a hash of the training data, and the
-cross-validation scores. When the service starts, it checks this metadata and
-retrains automatically if the model is missing, was built with a different
-library version, or the training data has changed.
+This runs cross-validation, prints the scores, trains on all 2,500 passages and
+saves the model with its metadata: the library version, a fingerprint of the
+training data, and the scores. On startup the service checks this metadata and
+retrains automatically if the model is missing or out of date.
 
-## Running the service
+### Step 7: serve it
 
 ```bash
-python -m swotbot serve          # http://127.0.0.1:8088, interactive docs at /docs
+python -m swotbot serve        # http://127.0.0.1:8088, interactive docs at /docs
 ```
 
-The service exposes three endpoints. `POST /predict` accepts a JSON body of the
-form `{"texts": [...]}` with up to 256 passages and returns, for each one, the
-label, the confidence and the probabilities of all four classes. `POST /api/`
-keeps the original contract used by the Word add-in: it reads the passage from
-the `TEXT` query parameter and returns a pair such as `["THREATS", 52.22]`,
-where the number is the confidence in percent. `GET /health` reports the
-service status, the class list and the model's cross-validation scores.
+The service replaces the original Flask and gevent setup with FastAPI. It
+accepts batches of up to 256 passages per request and checks input sizes.
+`/health` reports which model is loaded and how it scored.
+
+### Step 8: classify passages
+
+From Python, send a batch and get back a label, a confidence and all four class
+probabilities for each passage:
 
 ```python
 import requests
 
-r = requests.post(
-    "http://127.0.0.1:8088/predict",
-    json={"texts": ["Manpower attrition risk along with increasing salary cost."]},
-)
-print(r.json())
+passages = [
+    "Long-standing presence in industry coupled with strong group support.",
+    "Exposure to foreign exchange fluctuation risk due to 99% export revenue.",
+]
+r = requests.post("http://127.0.0.1:8088/predict", json={"texts": passages})
+for item in r.json():
+    print(item["label"], round(item["confidence"], 2), item["text"][:60])
 ```
 
-## Limitations
+The Word add-in uses the original endpoint, unchanged, so existing templates
+keep working. It sends `POST /api/?TEXT=...` and receives a pair such as
+`["THREATS", 52.22]`, where the number is the confidence in percent.
 
-The classifier makes mistakes. The most common confusions are between strengths
-and weaknesses, which share vocabulary but point in opposite directions, and
-between weaknesses and threats, which differ mainly in whether the risk is
-internal or external. Its output should be treated as a first draft for an
-analyst to review, not as a finished report.
+### Step 9: consolidate into the report
 
-The training data comes from a single genre: Indian credit-rating narratives.
-Accuracy on press releases, blogs or legal text will probably be lower until
-labelled examples from those sources are added.
+Group the classified passages by label, sort each group by confidence, and
+write the four groups into the Strengths, Weaknesses, Opportunities and Threats
+sections of the Word template. Keep the source document and page with each
+passage so the report stays traceable. Passages below a confidence threshold,
+for example 0.5, go into a "for review" list instead of the report body.
 
-The confidence score is a model probability, not a guarantee. Passages with low
-confidence, for example below 0.5, are best routed to a person.
+## Running the training on Hugging Face
 
-## What would improve it most
+The project was rebuilt with Claude Code working in a cloud container with
+4 CPU cores and no GPU. Getting BERT-scale training to work took these steps.
 
-The largest gains are likely to come from data rather than from model changes.
-Relabelling `test.csv` and adding passages from the other document types
-would broaden coverage. A held-out test set labelled independently and never
-used for model selection would make the reported accuracy trustworthy. Finally,
-generating the Word "SWOT Analysis" document on the server, for example with
-`python-docx`, would let the pipeline run end to end without the VBA add-in.
+**Open the network.** The container could not reach `huggingface.co` at first,
+so pretrained models could not be downloaded. The fix was a setting, not code:
+add `huggingface.co` and `*.hf.co` to the environment's allowed domains, then
+start a new session.
+
+**Handle the token safely.** The Hugging Face token lives in a `.env` file that
+git ignores. Claude scanned every commit for anything shaped like a key, and
+checked the token with `HfApi().whoami()` without printing it. Two routes failed
+and should be skipped. The AWS-style keys already in the environment were
+placeholders, so the S3 route to the bucket failed. `hf-mount` needs FUSE
+support, which containers often lack. The `huggingface_hub` library reads and
+writes buckets directly.
+
+**Use Jobs for compute.** A Hugging Face bucket only stores files. Hugging Face
+Jobs runs code on rented hardware and can mount a bucket as a folder. The
+benchmark ran on an `a10g-small` machine (one NVIDIA A10G GPU, $1.00 per hour
+when this was written) with a hard two-hour timeout, which caps the cost at $2.
+
+**Package the run.** A launcher copies an explicit list of files (the code and
+the training data, never `.env`) into the bucket and starts the job. The job
+installs pinned dependencies, runs the benchmark, and writes each model's
+results to the bucket as soon as that model finishes. The bucket is mounted at
+`/bucket`, because `/data` is reserved by Jobs.
+
+**Make failures cheap.** An error in one model is logged and the run moves on.
+A hard crash (out of memory, GPU fault) kills the process, as it would kill a
+notebook kernel. Even then, finished models are already saved, and relaunching
+skips them and resumes at the first unfinished one.
+
+## Limitations and controls
+
+The most common errors are confusing strengths with weaknesses, which use the
+same vocabulary with opposite meaning, and weaknesses with threats, which differ
+mainly in whether the risk is internal or external. An analyst should review
+the draft before it is used in a decision.
+
+The training data comes from one genre, Indian credit-rating narratives.
+Accuracy on press releases, legal documents or media coverage is likely to be
+lower until labelled examples from those sources are added. A pilot should
+measure accuracy on each document type before relying on it.
+
+The confidence score is a model estimate, not a guarantee. It is useful for
+sorting work, but it should be checked against real review outcomes to see
+whether, say, 80 percent confidence really means about 80 percent correct.
+
+## What comes next
+
+The largest gains are likely to come from data. Labelling passages from the
+other document types, and building an independent test set that is never used
+for tuning, matter more than switching models. On the engineering side, the
+next step is to generate the Word report on the server, so the full pipeline
+from documents to "SWOT Analysis" runs without the VBA add-in.
