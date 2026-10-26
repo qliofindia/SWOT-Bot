@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import io
 import math
+import os
 import re
 import sys
 import time
@@ -44,7 +45,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 
 ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / "benchmarks"
+OUT = Path(os.environ.get("SWOTBOT_BENCH_OUT", ROOT / "benchmarks"))
 FOLDS_DIR = OUT / "folds"
 sys.path.insert(0, str(ROOT))
 from swotbot.estimators import NBSVM, SpacyVectors  # noqa: E402
