@@ -1,0 +1,32 @@
+[project]
+name = "swotbot"
+version = "2.0.0"
+description = "Classifies business-analysis text into Strengths, Weaknesses, Opportunities and Threats."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.162",
+    "uvicorn[standard]>=0.54",
+    "pydantic>=2.14",
+    "pydantic-settings>=2.6",
+    "scikit-learn>=1.9",
+    "pandas>=3.0",
+    "numpy>=2.3",
+    "joblib>=1.5",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=9", "httpx>=0.28", "requests>=2.32"]
+
+[project.scripts]
+swotbot = "swotbot.__main__:main"
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["swotbot"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
