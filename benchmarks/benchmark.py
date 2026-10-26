@@ -244,8 +244,8 @@ def render_md(df: pd.DataFrame, n: int, folds: int) -> str:
         "- *p vs #1*: corrected resampled t-test on per-fold macro-F1 against the top row. "
         "p ≥ 0.05 means the gap is not distinguishable from fold noise with this much data.",
         "- Log loss measures probability quality (lower is better); n/a for models without probabilities.",
-        "- Fit and predict times are measured on the machine that ran the benchmark (CPU unless stated). "
-        "Predict is per document on unseen strings, batch of 200.",
+        f"- Fit and predict times were measured on: {os.environ.get('SWOTBOT_BENCH_HW', 'Hugging Face Jobs a10g-small (1x NVIDIA A10G, 4 vCPU)')}. "
+        "Predict is per document on unseen strings, batch of 200; transformer inference on CPU is far slower.",
         "- Size is the trained artifact; for pretrained encoders/vectors it is their parameter memory.",
         "",
     ]

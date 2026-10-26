@@ -90,3 +90,18 @@ transformer, fine-tune a model such as `deberta-v3-base` with Hugging Face
 `transformers` using `max_length` ≥ 256. Wrap it in a class with the same
 `predict(texts) -> list[Prediction]` method, and compare it against the
 0.846 CV baseline on the same folds before switching.
+
+## Benchmark
+
+28 models compared on identical 5-fold CV; full results in
+[`benchmarks/RESULTS.md`](benchmarks/RESULTS.md). Fine-tuned RoBERTa-base scored
+highest (macro-F1 0.875), followed by BERT-base (0.867) and DistilBERT (0.863).
+The best classical model, a soft-voting TF-IDF ensemble, scored 0.853, and the
+current production model 0.845.
+
+- Step by step: `notebooks/benchmark.ipynb`, one cell per model. It loads saved
+  results, or trains the model when `RUN_MISSING=1`; errors stay in their cell.
+- On a Hugging Face GPU: `python benchmarks/launch_hf_job.py --notebook --timeout 30m`
+  executes the notebook as an HF Job (needs `HF_TOKEN` in `.env`, billed to that
+  account). Then fetch the results with `python benchmarks/launch_hf_job.py --fetch`.
+- To regenerate the notebook after adding models: `python notebooks/make_benchmark_notebook.py`.

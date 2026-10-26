@@ -1,0 +1,6 @@
+fold,accuracy,f1_macro,log_loss,fit_s,model,family,ms_per_doc,size_kb
+0,0.786,0.7882482122980425,0.6342874765396118,4.329777679000017,"Transformer encoder (2-layer, from scratch) + GloVe",Neural (from scratch),0.09675517499999842,10889.546875
+1,0.788,0.788268197468508,0.5452326536178589,3.498669960999905,"Transformer encoder (2-layer, from scratch) + GloVe",Neural (from scratch),0.09675517499999842,10889.546875
+2,0.77,0.7632471663632256,0.6110069751739502,3.4019015150001906,"Transformer encoder (2-layer, from scratch) + GloVe",Neural (from scratch),0.09675517499999842,10889.546875
+3,0.814,0.8158464974819601,0.5165508389472961,4.201234688000113,"Transformer encoder (2-layer, from scratch) + GloVe",Neural (from scratch),0.09675517499999842,10889.546875
+4,0.782,0.7763517615405244,0.6600764393806458,4.507153804000154,"Transformer encoder (2-layer, from scratch) + GloVe",Neural (from scratch),0.09675517499999842,10889.546875

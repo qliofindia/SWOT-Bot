@@ -164,9 +164,10 @@ from each passage. The first version used 32. Since the median passage is 93
 tokens, 74 percent of passages were cut off and the model never saw most of
 their text. At 256 tokens only 3 percent are truncated.
 
-On a laptop-class CPU, one epoch takes about 24 minutes. On a single GPU it
-takes about a minute, which is why the heavy training runs on Hugging Face (see
-"Running the training on Hugging Face" below).
+Hardware decides how practical this is. On a 4-core CPU, one epoch over 2,000
+passages took about 24 minutes. On one NVIDIA A10G GPU, all three epochs took
+37 seconds. That is why the heavy training runs on Hugging Face (see "Running
+the training on Hugging Face" below).
 
 ### Step 4: measure it honestly
 
@@ -187,9 +188,8 @@ counts weaknesses and threats as much as strengths.
 ### Step 5: compare BERT against the alternatives
 
 BERT is not automatically the best choice. It is large, slow on ordinary
-hardware, and with only 2,500 examples it may not beat simpler methods. So BERT
-was benchmarked against 27 other models on the same five folds. The other
-models fall into these groups:
+hardware, and with only 2,500 examples it may not beat simpler methods. So 28
+models were benchmarked on the same five folds. They fall into these groups:
 
 - classical classifiers on word and phrase frequencies (logistic regression,
   support vector machines, naive Bayes, gradient-boosted trees);
@@ -205,7 +205,73 @@ Each model was compared with the leader using a statistical test that accounts
 for the overlap between cross-validation training sets. A model is only called
 better when the gap is larger than fold-to-fold noise.
 
-<!-- RESULTS -->
+### What the benchmark found
+
+Twenty-seven of the 28 models completed. FinBERT failed on the first run: its
+published checkpoint carries a three-class sentiment head, and the code did not
+allow that head to be replaced with a four-class one. The fix is a one-line
+change, and FinBERT will be rerun on its own.
+
+**Fine-tuned transformers came first.** RoBERTa-base reached a macro-F1 of 0.875
+(accuracy 0.879), BERT-base 0.867 and DistilBERT 0.863. These three are
+statistically indistinguishable from one another: RoBERTa against BERT gives
+p = 0.54, and against DistilBERT p = 0.24. RoBERTa also produced the most
+reliable probabilities, with the lowest log loss of any model (0.392).
+
+**The best classical models came close.** A soft-voting ensemble of three linear
+models scored 0.853. A single ridge classifier on TF-IDF features scored 0.850.
+Logistic regression, the model the service currently uses, scored 0.845.
+
+**How large is the transformers' lead?** RoBERTa beats the current production
+model by three points, and that gap is statistically significant (p = 0.04). It
+beats the ensemble by 2.2 points, which only just clears the bar (p = 0.049).
+Against ridge (2.5 points, p = 0.07) and word-and-character logistic regression
+(2.8 points, p = 0.13) the gap does not reach significance. With 2,500 passages
+and five folds, the honest reading is that fine-tuned transformers are probably
+better by two to three points, but this dataset is too small to prove it beyond
+doubt.
+
+**Neural networks trained from scratch did not help.** A feed-forward network on
+TF-IDF features matched the linear models at 0.847, because it learns the same
+phrase signals. The convolutional network (0.829), the bidirectional LSTM
+(0.810) and the small Transformer (0.786) all scored lower. Learning language
+patterns from 2,500 examples is too much to ask of these architectures; models
+pretrained on large corpora start with that knowledge.
+
+**Averaged embeddings did worst.** Frozen sentence encoders scored between
+0.775 and 0.819. Averaged word vectors (GloVe 0.774, Doc2Vec 0.779, spaCy
+0.733) and fastText (0.771 from scratch, 0.817 with GloVe initialisation)
+trailed the simple TF-IDF models by three to eleven points.
+
+The pattern makes sense for this task. A SWOT label depends on two things:
+direction (good or bad) and locus (inside or outside the company). Both are
+carried by specific phrases, such as "collection period remained high," "low
+gearing" or "slowdown in the automobile industry." TF-IDF keeps those phrases
+intact. Averaging word vectors blurs them into a general topic, which is why
+embedding models confuse a strong balance sheet with a weak one. Fine-tuned
+transformers read the phrases in context, including words like "however" and
+"despite," which is where their extra points come from.
+
+**Accuracy has a cost.** The fine-tuned RoBERTa model is 475 MB. Each fold took
+38 seconds to train on the GPU, and it classifies a passage in 1.7 ms on the
+GPU. On a CPU it is much slower; measure it on the target hardware before
+deploying. The ridge classifier is 835 KB, trains in under a second, and
+classifies a passage in 0.09 ms on an ordinary CPU.
+
+**Compared with the original project:** the first version claimed 95 percent
+from training accuracy. Measured properly with cross-validation, BERT reaches
+87 percent accuracy on this data, and only after the input length is raised
+from 32 to 256 tokens.
+
+**Recommendation.** Where accuracy matters most and a GPU, or a few
+milliseconds of extra latency per passage, is acceptable, use fine-tuned
+RoBERTa-base. Keep the TF-IDF ensemble as a lightweight fallback: it needs no
+GPU, has no download, and gives up only about two points. Either way, the
+largest remaining gain is more and cleaner labelled data, not a different model.
+
+The full results for every model, including per-fold scores, are in
+`benchmarks/RESULTS.md`. To rerun any model, open
+`notebooks/benchmark.ipynb`, which has one cell per model.
 
 ### Step 6: train and save the production model
 
@@ -214,8 +280,12 @@ pip install -e ".[dev]"
 python -m swotbot train
 ```
 
-This runs cross-validation, prints the scores, trains on all 2,500 passages and
-saves the model with its metadata: the library version, a fingerprint of the
+The service currently ships the TF-IDF logistic-regression model. It needs no
+GPU, which makes it the easiest to run anywhere. Serving the fine-tuned RoBERTa
+model behind the same API is the next engineering step.
+
+This command runs cross-validation, prints the scores, trains on all 2,500
+passages and saves the model with its metadata: the library version, a fingerprint of the
 training data, and the scores. On startup the service checks this metadata and
 retrains automatically if the model is missing or out of date.
 
@@ -279,7 +349,8 @@ writes buckets directly.
 **Use Jobs for compute.** A Hugging Face bucket only stores files. Hugging Face
 Jobs runs code on rented hardware and can mount a bucket as a folder. The
 benchmark ran on an `a10g-small` machine (one NVIDIA A10G GPU, $1.00 per hour
-when this was written) with a hard two-hour timeout, which caps the cost at $2.
+when this was written) with a hard two-hour timeout, which capped the cost at
+$2. The full run of 27 models took 44.5 minutes, about $0.74 at that rate.
 
 **Package the run.** A launcher copies an explicit list of files (the code and
 the training data, never `.env`) into the bucket and starts the job. The job
@@ -290,7 +361,10 @@ results to the bucket as soon as that model finishes. The bucket is mounted at
 **Make failures cheap.** An error in one model is logged and the run moves on.
 A hard crash (out of memory, GPU fault) kills the process, as it would kill a
 notebook kernel. Even then, finished models are already saved, and relaunching
-skips them and resumes at the first unfinished one.
+skips them and resumes at the first unfinished one. The same logic is available
+as a notebook, `notebooks/benchmark.ipynb`, with one cell per model. A failed
+cell prints its error and the next cell still runs, so a single model can be
+fixed and rerun on its own.
 
 ## Limitations and controls
 
@@ -313,5 +387,6 @@ whether, say, 80 percent confidence really means about 80 percent correct.
 The largest gains are likely to come from data. Labelling passages from the
 other document types, and building an independent test set that is never used
 for tuning, matter more than switching models. On the engineering side, the
-next step is to generate the Word report on the server, so the full pipeline
-from documents to "SWOT Analysis" runs without the VBA add-in.
+next steps are to serve the fine-tuned RoBERTa model behind the existing API,
+and to generate the Word report on the server, so the full pipeline from
+documents to "SWOT Analysis" runs without the VBA add-in.

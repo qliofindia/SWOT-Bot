@@ -4,6 +4,7 @@ Requires HF_TOKEN (in the environment or .env) with bucket write and Jobs permis
 Billed to the token's account at the flavor's rate.
 
     python benchmarks/launch_hf_job.py [--flavor a10g-small] [--timeout 2h] [-- --suite fast]
+    python benchmarks/launch_hf_job.py --notebook --timeout 30m   # execute notebooks/benchmark.ipynb
     python benchmarks/launch_hf_job.py --fetch     # download results into benchmarks/
 """
 
@@ -17,7 +18,8 @@ from huggingface_hub import HfApi, Volume
 
 ROOT = Path(__file__).resolve().parent.parent
 CODE_FILES = ["pyproject.toml", "data/train.csv", "swotbot", "benchmarks/__init__.py",
-              "benchmarks/benchmark.py", "benchmarks/neural.py", "benchmarks/hf_job.py"]
+              "benchmarks/benchmark.py", "benchmarks/neural.py", "benchmarks/hf_job.py",
+              "benchmarks/hf_notebook_job.py", "notebooks/benchmark.ipynb"]
 
 
 def load_dotenv():
@@ -35,6 +37,8 @@ def main():
     ap.add_argument("--flavor", default="a10g-small")
     ap.add_argument("--timeout", default="2h")
     ap.add_argument("--fetch", action="store_true", help="download results instead of launching")
+    ap.add_argument("--notebook", action="store_true",
+                    help="execute notebooks/benchmark.ipynb cell by cell (trains only models without results)")
     ap.add_argument("suite", nargs="*", help="arguments passed to `benchmark.py run`")
     args = ap.parse_args()
     load_dotenv()
@@ -58,13 +62,13 @@ def main():
     print(f"code uploaded to {remote}/code")
 
     job = api.run_uv_job(
-        str(ROOT / "benchmarks" / "hf_job.py"),
-        script_args=args.suite,
+        str(ROOT / "benchmarks" / ("hf_notebook_job.py" if args.notebook else "hf_job.py")),
+        script_args=[] if args.notebook else args.suite,
         flavor=args.flavor,
         timeout=args.timeout,
         secrets={"HF_TOKEN": os.environ["HF_TOKEN"]},
         volumes=[Volume(type="bucket", source=args.bucket, mount_path="/bucket")],
-        name="swotbot-benchmark",
+        name="swotbot-notebook" if args.notebook else "swotbot-benchmark",
     )
     print(f"job {job.id} started on {args.flavor}: {getattr(job, 'url', '')}")
 
