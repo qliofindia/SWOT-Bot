@@ -9,6 +9,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 HF_TOKEN=hf_...                  # optional: higher Hugging Face download limits
 AWS_ACCESS_KEY_ID=...            # optional: Hugging Face bucket via s3.hf.co
 AWS_SECRET_ACCESS_KEY=...
+MONGODB_URI=mongodb://<user>:<password>@localhost:27017   # optional: notebooks/mongodb_atlas.ipynb
 ```
 
 Restrict the file: `chmod 600 .env` (Linux/macOS).
@@ -17,6 +18,7 @@ Restrict the file: `chmod 600 .env` (Linux/macOS).
 |---|---|---|
 | `ANTHROPIC_API_KEY` | Claude API calls | https://console.anthropic.com → API Keys |
 | `HF_TOKEN` | Downloading BERT / sentence encoders with higher rate limits | https://huggingface.co/settings/tokens |
+| `MONGODB_URI` | Connection string for the historical MongoDB notebook | Your MongoDB server or Atlas cluster |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Reading the `sln2737/Brain` bucket through `https://s3.hf.co/sln2737` | Bucket settings on Hugging Face |
 
 ## Checking a key without printing it
