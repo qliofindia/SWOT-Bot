@@ -212,6 +212,13 @@ published checkpoint carries a three-class sentiment head, and the code did not
 allow that head to be replaced with a four-class one. The fix is a one-line
 change, and FinBERT will be rerun on its own.
 
+![Macro-F1 for 27 models, mean and one standard deviation across five folds](images/benchmark_macro_f1.png)
+
+*Figure 1. Every completed model, ranked by macro-F1. Dots are the mean over
+five folds and lines span one standard deviation. Overlapping lines mean the
+difference is within fold-to-fold noise. Generated from
+`benchmarks/results.csv`.*
+
 **Fine-tuned transformers came first.** RoBERTa-base reached a macro-F1 of 0.875
 (accuracy 0.879), BERT-base 0.867 and DistilBERT 0.863. These three are
 statistically indistinguishable from one another: RoBERTa against BERT gives
@@ -273,6 +280,43 @@ The full results for every model, including per-fold scores, are in
 `benchmarks/RESULTS.md`. To rerun any model, open
 `notebooks/benchmark.ipynb`, which has one cell per model.
 
+![Notebook cells for the fine-tuned transformers, with per-fold scores](images/notebook_transformers.png)
+
+*Figure 2. The fine-tuned transformer section of the executed notebook. Each
+cell prints one model's per-fold macro-F1, accuracy, log loss and training
+time. The FinBERT cell reports that it has no saved results yet, which is how a
+failed or skipped step appears.*
+
+### What the predictions look like
+
+Aggregate scores are easy to doubt, so here are individual passages. Each one
+was classified by the production model (TF-IDF with logistic regression)
+trained on the other four folds, so the model had never seen the passage. The
+script that produced this output is in the repository, and anyone can rerun it
+and get the same result:
+
+![Terminal output of benchmarks/examples.py](images/oof_examples_terminal.png)
+
+*Figure 3. Out-of-fold predictions on eight passages from the training data:
+four correct, three wrong and one correct at low confidence. Overall
+out-of-fold accuracy is 0.846, the same as in the benchmark.*
+
+The mistakes show the model's limits. Example 5 describes the company's own
+export plan. The labeller saw an opportunity (external demand); the model saw a
+strength (an internal initiative), with 0.69 confidence. A reasonable analyst
+could argue either way, and the confidence is not low enough to flag it for
+review. Example 6 is the classic internal-versus-external confusion:
+"increasing competitive intensity" is a market condition, so a threat, but the
+model called it a weakness. Example 7 mentions regulation and selling prices
+in a positive context, and the model leaned negative.
+
+Examples 6 and 7, and the uncertain correct answer in example 8, all have
+confidence below 0.5. With a review threshold of 0.5, two of the three errors
+(6 and 7) and the shaky correct answer (8) would reach an analyst. The error in
+example 5, at 0.69, would not.
+That is why the confidence threshold should be tuned against real review
+outcomes rather than set once and forgotten.
+
 ### Step 6: train and save the production model
 
 ```bash
@@ -315,6 +359,21 @@ r = requests.post("http://127.0.0.1:8088/predict", json={"texts": passages})
 for item in r.json():
     print(item["label"], round(item["confidence"], 2), item["text"][:60])
 ```
+
+The service also publishes interactive documentation at `/docs`, where a
+request can be sent from the browser. The screenshot below is a real request to
+the running service. It sends three passages from `data/test.csv`, none of
+which appear in the training data:
+
+![Interactive API documentation showing a POST /predict request and its response](images/api_predict_swagger.png)
+
+*Figure 4. A live call to `POST /predict`. The first passage ("increasing
+thrust on improving efficiencies to drive growth") is classified as an
+opportunity at 0.73. The second, about customers building procurement software
+in-house, is a threat at 0.90, the clearest call of the three. The third
+describes a hiring plan to manage attrition. The model calls it a threat at only
+0.53, but it reads more like a mitigating strength, so this is the kind of
+passage the review step exists for.*
 
 ### Step 9: consolidate into the report
 
