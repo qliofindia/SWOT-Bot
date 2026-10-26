@@ -130,6 +130,74 @@ python benchmarks/benchmark.py report         # rebuild the report
 
 <!-- RESULTS -->
 
+## Using Hugging Face with Claude
+
+The benchmark was built and run with Claude Code working in a cloud session, a
+sandboxed Linux container with 4 CPU cores and no GPU. Getting BERT-class models
+into that workflow took several steps. Some were dead ends, and they are worth
+knowing about before you start.
+
+**Step 1: allow the Hugging Face domains.** The container's network policy
+blocked `huggingface.co` at first, so no pretrained model could be downloaded.
+Package indexes (PyPI) and GitHub were reachable, so classical models, spaCy
+vectors and GloVe (served from GitHub releases) worked, but BERT did not. The
+fix is in the cloud environment settings, not in code: under Network access,
+add `huggingface.co` and `*.hf.co` to the allowed domains and keep package
+managers allowed. The second pattern matters because downloads, buckets and
+the S3-compatible endpoint live on subdomains such as `s3.hf.co`. A change to
+the network policy may only apply to sessions started after it, so plan on
+opening a new session.
+
+**Step 2: provide a token without committing it.** Claude stored the Hugging
+Face access token in a `.env` file at the repository root. That file is listed
+in `.gitignore`, along with patterns such as `*.key`, `*API_Key*` and
+`secrets/`. Before each commit Claude scanned the staged changes for anything
+shaped like a key. The token was checked with `HfApi().whoami()`, which
+confirmed the account name and token type without printing the token. Two
+things did not work and wasted time. The `AWS_ACCESS_KEY_ID` variables already
+in the environment were placeholders, so the boto3 route to the bucket failed
+with "InvalidAccessKeyId." The `hf-mount` route needs both network access and
+FUSE support in the container. The `huggingface_hub` library (version 2.3) has
+native bucket functions, so neither boto3 nor a mount is needed.
+
+**Step 3: understand what a bucket is.** A Hugging Face bucket is storage. It
+holds files but cannot run code. To run models on Hugging Face hardware you
+need Hugging Face Jobs, which runs a container on a chosen machine. A job can
+mount a bucket as a folder.
+
+**Step 4: decide where the compute runs.** Claude timed one BERT-base training
+step in the container before choosing. At 256 tokens, an epoch over 2,000
+passages took about 24 minutes on 4 CPU cores, so five folds of three epochs
+would have taken about six hours. On a Hugging Face `a10g-small` machine (one
+A10G GPU, $1.00 per hour at the time of writing) the same work takes minutes.
+The job was given a hard two-hour timeout, which caps the cost at $2 whatever
+happens. Prices come from `HfApi().list_jobs_hardware()` and change, so check
+them before running.
+
+**Step 5: package the run.** The job runs a single `uv` script,
+`benchmarks/hf_job.py`. Its pinned dependencies are declared in the script
+header, so the job installs exactly what was tested. A launcher,
+`benchmarks/launch_hf_job.py`, copies an explicit allow-list of files (the
+code and `data/train.csv`, never `.env`) into the bucket under `code/`. It
+then starts the job with the token passed as a job secret and the bucket
+mounted. One detail matters: the mount path `/data` is reserved for job
+artifacts when running local scripts, so the bucket is mounted at `/bucket`.
+
+**Step 6: make failures cheap.** Each model's per-fold scores are written to
+`/bucket/results/folds/` as soon as that model finishes. An ordinary Python
+error inside one model is caught and logged, and the run moves on to the next
+model. A hard crash, such as running out of memory or a GPU fault, kills the
+process, just as it would kill a notebook kernel. Even then, every finished
+model is already saved, and launching again skips completed models and resumes
+at the first unfinished one. The notebook version of the benchmark follows the
+same rule, one cell per model, so a failed model can be fixed and rerun alone.
+
+**Step 7: monitor and collect.** Claude polled the job with
+`HfApi().inspect_job()` and `fetch_job_logs()` and reported each model's score
+as it finished. When the job ended, the results were pulled back into the
+repository with `python benchmarks/launch_hf_job.py --fetch`, and the report
+was rebuilt with `python benchmarks/benchmark.py report`.
+
 ## Training the production model
 
 ```bash
