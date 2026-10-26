@@ -7,3 +7,15 @@ venv/
 *.egg-info/
 build/
 models/
+
+# secrets
+.env.*
+!.env.example
+*.key
+*.pem
+*API_Key*
+*api_key*
+secrets/
+
+# benchmark caches
+benchmarks/folds/*.tmp
