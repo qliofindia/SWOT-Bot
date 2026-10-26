@@ -106,9 +106,9 @@ There are five stages:
 5. **Consolidate.** Group the passages by label and write them into the four
    sections of the Word report.
 
-The model runs as a small HTTP service. A Word add-in (in `word-addin/`) calls
-it from inside Word, so an analyst can classify selected text without leaving
-the document.
+The model runs as a small HTTP service, so any tool that can send an HTTP
+request (a script, a document pipeline or an internal application) can
+classify passages.
 
 ## Building it, step by step
 
@@ -316,10 +316,6 @@ for item in r.json():
     print(item["label"], round(item["confidence"], 2), item["text"][:60])
 ```
 
-The Word add-in uses the original endpoint, unchanged, so existing templates
-keep working. It sends `POST /api/?TEXT=...` and receives a pair such as
-`["THREATS", 52.22]`, where the number is the confidence in percent.
-
 ### Step 9: consolidate into the report
 
 Group the classified passages by label, sort each group by confidence, and
@@ -389,4 +385,4 @@ other document types, and building an independent test set that is never used
 for tuning, matter more than switching models. On the engineering side, the
 next steps are to serve the fine-tuned RoBERTa model behind the existing API,
 and to generate the Word report on the server, so the full pipeline from
-documents to "SWOT Analysis" runs without the VBA add-in.
+documents to "SWOT Analysis" runs as one command.
