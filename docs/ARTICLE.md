@@ -2,100 +2,131 @@
 
 ## The problem
 
-A company produces a lot of narrative text: annual reports, business and
-financial highlights, executive summaries, credit and audit reports, risk
-reports, industry overviews, policies, press releases and blog posts. An analyst
-building a SWOT analysis reads all of it and sorts each relevant passage into one
-of four buckets:
+Companies produce a steady stream of narrative text: annual reports, business
+and financial highlights, executive summaries, credit and audit reports, risk
+reports, industry overviews, policies, announcements and blog posts. An analyst
+preparing a SWOT analysis reads this material and sorts each relevant passage
+into one of four groups.
 
-- **Strength:** an internal advantage ("low gearing gives financial flexibility")
-- **Weakness:** an internal limitation ("collection period of 113–128 days against a 30–60 day policy")
-- **Opportunity:** an external factor the firm can use ("foray into Netherlands, Singapore and Dubai")
-- **Threat:** an external risk ("slowdown in the automobile sector, the main customer industry")
+A **strength** is an internal advantage, for example "low gearing gives
+financial flexibility." A **weakness** is an internal limitation, such as a
+collection period of 113 to 128 days against a credit policy of 30 to 60 days.
+An **opportunity** is an external factor the firm can use, like expansion into
+new markets through subsidiaries. A **threat** is an external risk, for
+instance a slowdown in the industry that buys most of the firm's output.
 
-SWOT-Bot automates the sorting step. It takes passages, labels each one S, W, O
-or T with a confidence score, and returns the labelled passages so they can be
-consolidated into a Word document titled "SWOT Analysis".
+SWOT-Bot automates the sorting. It takes passages of text, assigns each one to
+a quadrant with a confidence score, and returns the results so they can be
+consolidated into a Word document titled "SWOT Analysis." In machine-learning
+terms this is single-label text classification with four classes: each passage
+belongs to exactly one quadrant.
 
-This is single-label, four-class text classification. Each passage belongs to
-exactly one quadrant.
+## How the pipeline works
 
-## The pipeline
+There are three stages. First, narrative passages (paragraphs or bullet points)
+are extracted from the source documents. Second, each passage is sent to the
+classifier, which returns a label and the probability of each of the four
+classes. Third, the passages are grouped by label and written into the four
+sections of the report.
 
-1. **Collect.** Extract narrative passages (paragraphs or bullet points) from the source documents.
-2. **Classify.** Send the passages to the model, which returns a label and class probabilities for each.
-3. **Consolidate.** Group the passages by label and write them into the four sections of a Word report.
-
-The Word add-in in `word-addin/` covers steps 2 and 3 from inside Word. It sends
-the selected text to a local HTTP service and shows the result.
+The Word add-in in `word-addin/` handles the second and third stages from
+inside Word. It sends the selected text to a local HTTP service and displays
+the classification.
 
 ## The data
 
-`data/train.csv` contains 2,500 labelled passages from Indian corporate credit
-and business-analysis reports. Each row has the text and a one-hot label:
+The training set, `data/train.csv`, contains 2,500 labelled passages taken from
+Indian corporate credit and business-analysis reports. Each row holds the text
+and a one-hot label across the four columns STRENGTHS, WEAKNESSES,
+OPPORTUNITIES and THREATS. The classes are moderately imbalanced: 827
+strengths, 619 weaknesses, 549 opportunities and 505 threats.
 
-| #id | Text | STRENGTHS | WEAKNESSES | OPPORTUNITIES | THREATS |
-|---|---|---|---|---|---|
-| 1 | Long-standing presence in industry coupled with part of TVS group | 1 | 0 | 0 | 0 |
+Passages vary from a single line to a few hundred words. Measured in BERT
+tokens, the median passage is 93 tokens long, the 90th percentile is 204, and
+the longest is 467.
 
-Class counts: S 827, W 619, O 549, T 505. Passages range from one line to a few
-hundred words. The median is 93 BERT tokens, the 90th percentile 204, and the
-maximum 467.
+Two problems in the data affect how results should be read. The small file
+`data/test.csv` (16 rows) is mislabelled: a passage describing a "competitive
+edge over peers" is marked as a weakness, and the file contains no strengths at
+all. It is therefore not used for evaluation. Separately, apostrophes were lost
+in an earlier encoding step, so "debtor's" appears as "debtor?s." This does not
+affect the models much, but it should be fixed at the source.
 
-Two data issues matter:
+## Why the first version was replaced
 
-- `data/test.csv` (16 rows) is mislabelled. For example, a passage about
-  "competitive edge over peers" is labelled WEAKNESS, and there are no STRENGTHS
-  rows at all. It is not used for evaluation.
-- Apostrophes were lost in an encoding step (`debtor?s`). This is harmless for
-  the models but worth fixing at the source.
+The first version fine-tuned BERT through ktrain, a Keras wrapper whose last
+release was in June 2024. Three issues made it unreliable.
 
-## Choosing a model
+The notebook set the maximum sequence length to 32 tokens. Because the median
+passage is 93 tokens, 74 percent of passages were truncated, and the model never
+saw most of the text it was meant to classify.
 
-The first version used ktrain to fine-tune BERT. ktrain is a Keras wrapper whose
-last release was in June 2024. The original notebook set `MAXLEN = 32`, so 74% of
-passages were cut off after 32 tokens. Its reported 95% "accuracy upon training"
-was training-set accuracy, which shows the model memorised the data, not that it
-generalises. The trained weights were never committed, so that result cannot be
-reproduced.
+The headline figure of 95 percent accuracy was measured on the training data.
+Training accuracy shows how well a model fits examples it has already seen. It
+says little about how it performs on new passages.
 
-Version 2 does not assume BERT is the answer. It benchmarks 28 models from
-nine families on the same data with the same protocol:
+The trained weights were never committed to the repository, so the result
+cannot be reproduced or checked.
 
-| Family | Models |
-|---|---|
-| Linear on TF-IDF | logistic regression, linear SVM, SGD, ridge, LSA + logistic regression |
-| Probabilistic | complement naive Bayes, NB-SVM |
-| Tree ensemble | LightGBM on LSA features |
-| Ensemble | soft vote of the three best linear models |
-| Static word embeddings | spaCy vectors, Gensim GloVe-300, Gensim Doc2Vec |
-| fastText | trained from scratch; initialised from GloVe |
-| Neural, trained here | MLP (ANN) on TF-IDF, Kim CNN, BiLSTM with attention, 2-layer Transformer |
-| Pretrained transformer, frozen | MiniLM, MPNet, BGE sentence embeddings + logistic regression |
-| Pretrained transformer, fine-tuned | DistilBERT, BERT-base, FinBERT, RoBERTa-base (max length 256) |
+Version 2 does not assume that BERT, or any other model, is the right choice. It
+runs a controlled comparison and lets the measurements decide.
 
-**Protocol.** Five-fold stratified cross-validation with a fixed seed, using
-identical folds for every model. Neural models use 10% of each training fold for
-early stopping; the test fold is never seen during training. The main metric is
-macro-F1, the unweighted mean F1 over the four classes, so the smaller classes
-count as much as STRENGTHS. Probability quality is measured with log loss.
+## How the models were compared
 
-**Deciding whether a difference is real.** With 2,500 examples, a 0.5-point gap
-between two models can be noise. Each model is compared with the top one using
-the Nadeau–Bengio corrected resampled t-test. A plain paired t-test over CV
-folds understates the variance because the training sets overlap. A model is
-only called better if p < 0.05.
+Twenty-eight models from nine families were evaluated on the same data under
+the same protocol.
 
-The benchmark runs as a Hugging Face Job on a single A10G GPU and writes results
-to `benchmarks/RESULTS.md`:
+The classical baselines are linear models on TF-IDF features: logistic
+regression, linear support vector machines, stochastic gradient descent, ridge
+regression, and logistic regression on a 300-dimensional latent semantic
+analysis (LSA) projection. They are joined by two probabilistic models
+(complement naive Bayes and NB-SVM), a gradient-boosted tree model (LightGBM on
+LSA features), and a soft-voting ensemble of the strongest linear models.
+
+The word-embedding models represent each passage by averaging pretrained word
+vectors from spaCy or from GloVe (loaded through Gensim), or by learning
+paragraph vectors with Gensim's Doc2Vec. fastText was trained both from scratch
+and with GloVe initialisation.
+
+The neural networks trained on this data are a feed-forward network (MLP) over
+TF-IDF features; a convolutional network in the style of Kim (2014), with
+filter widths of three, four and five words; a bidirectional LSTM with
+attention pooling; and a two-layer Transformer encoder trained from scratch.
+The CNN, LSTM and Transformer start from GloVe word vectors.
+
+The pretrained transformers were tested in two ways. In the frozen setting, a
+sentence encoder (MiniLM, MPNet or BGE) turns each passage into a fixed vector
+and logistic regression classifies it. In the fine-tuned setting, DistilBERT,
+BERT-base, FinBERT (a BERT model pretrained on financial text) and RoBERTa-base
+are trained end to end on the classification task, with a maximum length of 256
+tokens. That length covers 97 percent of passages in full.
+
+Every model used five-fold stratified cross-validation with a fixed random seed,
+so all of them were trained and tested on the same splits. Neural models held
+back 10 percent of each training fold for early stopping and never saw the
+test fold during training. The main metric is macro-F1, the average F1 score
+across the four classes, which weights the smaller classes equally with the
+largest. Log loss is reported as a measure of how well calibrated the predicted
+probabilities are.
+
+With only 2,500 examples, a difference of half a point between two models can
+be noise. Each model was therefore compared with the top-ranked model using the
+Nadeau–Bengio corrected resampled t-test. This variant accounts for the overlap
+between training sets in cross-validation; a plain paired t-test understates
+the variance. A model counts as genuinely worse than the leader only when p is
+below 0.05.
+
+The full benchmark ran as a Hugging Face Job on a single NVIDIA A10G GPU. The
+complete per-model results, including fit time, prediction latency and model
+size, are in `benchmarks/RESULTS.md`, and they can be reproduced with:
 
 ```bash
-python benchmarks/launch_hf_job.py            # upload code, start the GPU job
-python benchmarks/launch_hf_job.py --fetch    # pull results
-python benchmarks/benchmark.py report         # rebuild the table
+python benchmarks/launch_hf_job.py            # upload code and start the GPU job
+python benchmarks/launch_hf_job.py --fetch    # download the results
+python benchmarks/benchmark.py report         # rebuild the report
 ```
 
-### Results
+## Benchmark results
 
 <!-- RESULTS -->
 
@@ -106,48 +137,57 @@ pip install -e ".[dev]"
 python -m swotbot train
 ```
 
-`train` runs 5-fold cross-validation, prints accuracy and macro-F1, fits the
-model on all 2,500 rows, and saves it to `models/` together with its metadata.
-The metadata records the scikit-learn version, a hash of the training data and
-the CV scores. On startup the service retrains automatically if the model is
-missing, was built with another library version, or the data has changed.
+The `train` command runs five-fold cross-validation, prints accuracy and
+macro-F1, fits the model on all 2,500 passages, and saves it to `models/`
+along with metadata: the library version, a hash of the training data, and the
+cross-validation scores. When the service starts, it checks this metadata and
+retrains automatically if the model is missing, was built with a different
+library version, or the training data has changed.
 
-## Serving
+## Running the service
 
 ```bash
 python -m swotbot serve          # http://127.0.0.1:8088, interactive docs at /docs
 ```
 
-| Endpoint | Purpose |
-|---|---|
-| `POST /predict` with `{"texts": [...]}` | batch classification; returns label, confidence and all four class probabilities per passage |
-| `POST /api/?TEXT=...` | the original contract used by the Word add-in; returns `["THREATS", 52.22]` |
-| `GET /health` | status, class list and the model's CV scores |
+The service exposes three endpoints. `POST /predict` accepts a JSON body of the
+form `{"texts": [...]}` with up to 256 passages and returns, for each one, the
+label, the confidence and the probabilities of all four classes. `POST /api/`
+keeps the original contract used by the Word add-in: it reads the passage from
+the `TEXT` query parameter and returns a pair such as `["THREATS", 52.22]`,
+where the number is the confidence in percent. `GET /health` reports the
+service status, the class list and the model's cross-validation scores.
 
 ```python
 import requests
-r = requests.post("http://127.0.0.1:8088/predict",
-                  json={"texts": ["Manpower attrition risk along with increasing salary cost."]})
+
+r = requests.post(
+    "http://127.0.0.1:8088/predict",
+    json={"texts": ["Manpower attrition risk along with increasing salary cost."]},
+)
 print(r.json())
 ```
 
 ## Limitations
 
-- About 15% of passages are misclassified, mostly STRENGTH↔WEAKNESS (same
-  vocabulary, opposite direction) and WEAKNESS↔THREAT (internal versus external
-  risk). Treat the output as a first draft for an analyst, not a final report.
-- The training data comes from one style of report: Indian credit-rating
-  narratives. Expect lower accuracy on press releases, blogs or legal text
-  until examples from those sources are labelled and added.
-- Confidence is a model probability, not a guarantee. Low-confidence passages
-  (for example under 0.5) should be routed to a person.
+The classifier makes mistakes. The most common confusions are between strengths
+and weaknesses, which share vocabulary but point in opposite directions, and
+between weaknesses and threats, which differ mainly in whether the risk is
+internal or external. Its output should be treated as a first draft for an
+analyst to review, not as a finished report.
+
+The training data comes from a single genre: Indian credit-rating narratives.
+Accuracy on press releases, blogs or legal text will probably be lower until
+labelled examples from those sources are added.
+
+The confidence score is a model probability, not a guarantee. Passages with low
+confidence, for example below 0.5, are best routed to a person.
 
 ## What would improve it most
 
-1. **More, cleaner labels.** Relabel `test.csv` and add passages from the other
-   document types. Data quality is the main limit at 2,500 examples.
-2. **A proper held-out test set,** labelled independently and never used for
-   model selection.
-3. **Report generation.** Turn the classified passages into the Word "SWOT
-   Analysis" document server-side (for example with `python-docx`), so the
-   pipeline works without the VBA add-in.
+The largest gains are likely to come from data rather than from model changes.
+Relabelling `test.csv` and adding passages from the other document types
+would broaden coverage. A held-out test set labelled independently and never
+used for model selection would make the reported accuracy trustworthy. Finally,
+generating the Word "SWOT Analysis" document on the server, for example with
+`python-docx`, would let the pipeline run end to end without the VBA add-in.
