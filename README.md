@@ -81,15 +81,12 @@ legacy/         original v1 Flask apps, request scripts and Google BERT TF1 code
 docs/demo.mp4   original demo video (was `videoplayback`)
 ```
 
-## Upgrading to a transformer later
+## Moving production to a transformer
 
-The original project fine-tuned BERT with `maxlen=32`, which truncated most
-paragraphs in the data. Its trained weights were never committed (only
-`tf_model.preproc`), so it can't be reproduced or compared. To try a
-transformer, fine-tune a model such as `deberta-v3-base` with Hugging Face
-`transformers` using `max_length` ≥ 256. Wrap it in a class with the same
-`predict(texts) -> list[Prediction]` method, and compare it against the
-0.846 CV baseline on the same folds before switching.
+The benchmark below shows fine-tuned RoBERTa-base ahead of the production
+model by 3 points of macro-F1 (p = 0.04). It is not yet wired into the
+service: `benchmarks/neural.py` contains `HFFineTuneClassifier`, which trains
+it, but serving it behind `/predict` is still to do.
 
 ## Benchmark
 
